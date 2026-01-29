@@ -3,31 +3,32 @@ import telebot
 from telebot import types
 import google.generativeai as genai
 
-# Environment Variables
+# --------- إعداد المتغيرات ---------
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# إعداد البوت
 bot = telebot.TeleBot(TOKEN)
-
-# إعداد Gemini مع الموديل المؤكد متاح
 genai.configure(api_key=GEMINI_API_KEY)
-WORKING_MODEL = "text-bison-001"  # غيريه بالموديل المدعوم عندك
 
+# --------- اختر موديل مؤكد متاح ---------
+WORKING_MODEL = "text-bison-001"  # استخدمي هذا أو أي موديل يظهر عندك في list_models()
+model = genai.GenerativeModel(WORKING_MODEL)
+
+# --------- دالة التحليل ---------
 def analyze(prompt):
     try:
-        response = genai.generate_text(
-            model=WORKING_MODEL,
-            prompt=prompt,
-            max_output_tokens=500,
-            temperature=0.5
+        response = model.generate_content(
+            prompt,
+            temperature=0.5,
+            max_output_tokens=500
         )
-        return response.text
+        # بعض نسخ SDK ترجع النص في response.text
+        return getattr(response, "text", str(response))
     except Exception as e:
         print("Gemini Error:", e)
         return f"⚠️ خطأ عند الاتصال بـ Gemini: {str(e)}"
 
-# ---- Telegram UI ----
+# --------- واجهة Telegram ---------
 def main_menu():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("🇪🇺 الدوريات الـ 5 الكبرى", "🌍 الحصان الأسود")
@@ -45,12 +46,12 @@ def handle_buttons(message):
         return
 
     prompt_map = {
-        "🇪🇺 الدوريات الـ 5 الكبرى": "حلل مباريات الدوريات الأوروبية الخمس الكبرى اليوم...",
-        "🌍 الحصان الأسود": "حلل مباراة لفريق غير متوقع (الحصان الأسود)...",
-        "🔥 ورقة اليوم": "أعطني أفضل ورقة رهان اليوم (ركنيات وDouble Chance)..."
+        "🇪🇺 الدوريات الـ 5 الكبرى": "حلل مباريات الدوريات الأوروبية الخمس الكبرى اليوم، ركز على الركنيات وDouble Chance (12)",
+        "🌍 الحصان الأسود": "حلل مباراة لفريق غير متوقع (الحصان الأسود)، ركز على الركنيات وDouble Chance (12)",
+        "🔥 ورقة اليوم": "أعطني أفضل ورقة رهان اليوم (ركنيات وDouble Chance 12)"
     }
 
-    bot.send_message(message.chat.id, "🔍 جارٍ التحليل...")
+    bot.send_message(message.chat.id, "🔍 جاري التحليل...")
     res = analyze(prompt_map[message.text])
     bot.send_message(message.chat.id, res)
 
