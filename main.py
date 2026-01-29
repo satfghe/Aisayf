@@ -16,15 +16,12 @@ genai.configure(api_key=GEMINI_API_KEY)
 
 # --------- موديل مضمون للعمل ---------
 WORKING_MODEL = "text-bison-001"  # موديل مضمون في حسابك المجاني
-model = genai.GenerativeModel(WORKING_MODEL)
 
 # --------- دالة التحليل ---------
 def analyze(prompt):
     try:
-        response = model.generate_content(
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return getattr(response, "text", str(response))
+        response = genai.generate_text(model=WORKING_MODEL, prompt=prompt, max_output_tokens=500)
+        return response.text
     except Exception as e:
         print("Gemini Error:", e)
         return f"⚠️ خطأ عند الاتصال بـ Gemini: {str(e)}"
