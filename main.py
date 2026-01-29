@@ -3,77 +3,86 @@ import telebot
 from telebot import types
 import google.generativeai as genai
 
-# --------- إعداد المتغيرات ---------
+# --------- المتغيرات ---------
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+KEY = os.getenv("GEMINI_API_KEY")
 
-if not TOKEN or not GEMINI_API_KEY:
-    print("❌ خطأ: لم يتم العثور على المتغيرات TELEGRAM_TOKEN و GEMINI_API_KEY")
+if not TOKEN or not KEY:
+    print("❌ Error: Missing Env Variables")
     raise SystemExit
 
-# --------- إعداد البوت ---------
+# --------- الإعداد ---------
 bot = telebot.TeleBot(TOKEN)
-genai.configure(api_key=GEMINI_API_KEY)
+genai.configure(api_key=KEY)
 
-# --------- إعداد الموديل مع تجاوز الحظر ---------
-safety_settings = [
+# --- 🛠️ الوظيفة السحرية: البحث عن الموديل المتاح ---
+def get_available_model():
+    """
+    هذه الدالة تبحث عن اسم الموديل الصحيح المتاح لحسابك
+    لتجنب خطأ 404
+    """
+    try:
+        print("🔍 جاري البحث عن الموديلات المتاحة...")
+        for m in genai.list_models():
+            # نبحث عن موديل يدعم generateContent ويحتوي على flash أو pro
+            if 'generateContent' in m.supported_generation_methods:
+                if 'flash' in m.name:
+                    print(f"✅ تم اعتماد الموديل: {m.name}")
+                    return m.name
+        # إذا لم يجد flash نستخدم gemini-pro كبديل
+        return "models/gemini-1.5-flash"
+    except Exception as e:
+        print(f"⚠️ تحذير: لم نتمكن من جلب القائمة، سنستخدم الافتراضي. {e}")
+        return "models/gemini-1.5-flash"
+
+# تحديد الموديل تلقائياً
+WORKING_MODEL = get_available_model()
+
+# إعدادات الأمان (مفتوحة للتوقعات)
+safety = [
     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
     {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
     {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
 ]
 
-model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash", 
-    safety_settings=safety_settings
-)
+model = genai.GenerativeModel(WORKING_MODEL, safety_settings=safety)
 
-# --------- دالة التحليل ---------
+# --------- التحليل ---------
 def analyze(prompt):
     try:
         response = model.generate_content(prompt)
-        if response.text:
-            return response.text
-        else:
-            return "⚠️ اعتذر الموديل عن الرد، حاول مرة أخرى."
+        return response.text if response.text else "⚠️ لا يوجد رد."
     except Exception as e:
-        return f"❌ فشل الاتصال: {str(e)}"
+        return f"❌ خطأ تقني: {str(e)[:100]}"
 
-# --------- واجهة Telegram ---------
+# --------- التلغرام ---------
 def main_menu():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("🇪🇺 الدوريات الـ 5 الكبرى", "🌍 الحصان الأسود")
+    kb.add("🇪🇺 الدوريات الكبرى", "🌍 الحصان الأسود")
     kb.add("🔥 ورقة اليوم")
     return kb
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(
-        message.chat.id,
-        "⚽ مرحبًا بك! اختر القسم الذي تريد تحليله:",
-        reply_markup=main_menu()
-    )
+    bot.send_message(message.chat.id, "⚽ جاهز للتوقعات! اختر:", reply_markup=main_menu())
 
 @bot.message_handler(func=lambda msg: True)
-def handle_buttons(message):
-    if message.text not in ["🇪🇺 الدوريات الـ 5 الكبرى", "🌍 الحصان الأسود", "🔥 ورقة اليوم"]:
-        bot.send_message(message.chat.id, "اختر من الأزرار ⬇️", reply_markup=main_menu())
+def handle(message):
+    if message.text not in ["🇪🇺 الدوريات الكبرى", "🌍 الحصان الأسود", "🔥 ورقة اليوم"]:
+        bot.send_message(message.chat.id, "استخدم الأزرار 👇", reply_markup=main_menu())
         return
 
-    # تم إصلاح السطر 68 هنا والتأكد من إغلاق النص
-    prompt_map = {
-        "🇪🇺 الدوريات الـ 5 الكبرى": "حلل أهم مباريات الدوريات الكبرى اليوم، اعطني توقعات للركنيات والفرصة المزدوجة.",
-        "🌍 الحصان الأسود": "ابحث عن مباراة غير متوقعة اليوم فيها فرصة ربح عالية.",
-        "🔥 ورقة اليوم": "أعطني أفضل 3 توقعات آمنة للمباريات اليوم في ورقة واحدة."
+    prompts = {
+        "🇪🇺 الدوريات الكبرى": "حلل مباريات اليوم في الدوريات الخمس الكبرى (فرص فوز، ركنيات، Double Chance).",
+        "🌍 الحصان الأسود": "ابحث عن فريق غير مرشح للفوز اليوم (Underdog) لديه فرصة قوية.",
+        "🔥 ورقة اليوم": "أعطني أفضل 3 توقعات آمنة لليوم (Bet Slip) مع نسبة أمان عالية."
     }
 
-    loading = bot.send_message(message.chat.id, "🔍 جاري التحليل...")
-    
-    result = analyze(prompt_map[message.text])
-    
-    bot.delete_message(message.chat.id, loading.message_id)
-    bot.send_message(message.chat.id, result)
+    msg = bot.send_message(message.chat.id, f"⏳ جاري التحليل باستخدام {WORKING_MODEL}...")
+    res = analyze(prompts[message.text])
+    bot.delete_message(message.chat.id, msg.message_id)
+    bot.send_message(message.chat.id, res)
 
 if __name__ == "__main__":
-    print("✅ البوت يعمل الآن...")
     bot.infinity_polling()
