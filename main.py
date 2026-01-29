@@ -15,13 +15,15 @@ bot = telebot.TeleBot(TOKEN)
 genai.configure(api_key=GEMINI_API_KEY)
 
 # --------- موديل مضمون للعمل ---------
-WORKING_MODEL = "text-bison-001"  # موديل متاح في حسابك المجاني 2026
+WORKING_MODEL = "text-bison-001"  # موديل مضمون في حسابك المجاني
 model = genai.GenerativeModel(WORKING_MODEL)
 
 # --------- دالة التحليل ---------
 def analyze(prompt):
     try:
-        response = model.generate_content(input=prompt)
+        response = model.generate_content(
+            messages=[{"role": "user", "content": prompt}]
+        )
         return getattr(response, "text", str(response))
     except Exception as e:
         print("Gemini Error:", e)
